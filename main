@@ -1,0 +1,235 @@
+# NGI Q-System Rock Mass Classification & Support Estimator
+# Barton, Lien & Lunde (1974); support relations per Barton (2002)
+import plotly.graph_objects as go
+import numpy as np
+
+# --- Joint and stress parameters (pick by description) ---
+# Each is a list of (description, value)
+joint_sets = [
+    ("Massive, no or few joints", 0.75),
+    ("One joint set", 2),
+    ("One joint set plus random joints", 3),
+    ("Two joint sets", 4),
+    ("Two joint sets plus random joints", 6),
+    ("Three joint sets", 9),
+    ("Three joint sets plus random joints", 12),
+    ("Four or more joint sets, heavily jointed", 15),
+    ("Crushed rock, earthlike", 20),
+]
+
+jr_opts = [
+    ("Non-persistent joints (rock contact at shearing)", 4),
+    ("Rough/irregular, undulating", 3),
+    ("Smooth, undulating", 2),
+    ("Slickensided, undulating", 1.5),
+    ("Rough/irregular, planar", 1.5),
+    ("Smooth, planar", 1.0),
+    ("Slickensided, planar", 0.5),
+    ("No rock-wall contact when sheared (filled joint)", 1.0),
+]
+
+ja_opts = [
+    ("Tightly healed, hard, non-softening filling", 0.75),
+    ("Unaltered joint walls, surface staining only", 1.0),
+    ("Slightly altered walls, non-softening mineral coating", 2.0),
+    ("Silty- or sandy-clay coating", 3.0),
+    ("Softening clay mineral coating", 4.0),
+    ("Sandy particles, clay-free disintegrated rock", 4.0),
+    ("Softening clay filling, continuous but thin (<5mm)", 8.0),
+    ("Thick continuous softening clay filling (>5mm)", 12.0),
+]
+
+jw_opts = [
+    ("Dry excavation or minor inflow", 1.0),
+    ("Medium inflow, occasional outwash of filling", 0.66),
+    ("Large inflow / high pressure, competent rock", 0.5),
+    ("Large inflow / high pressure, considerable outwash", 0.33),
+    ("Exceptionally high inflow, decaying with time", 0.2),
+    ("Exceptionally high inflow, no noticeable decay", 0.1),
+]
+
+srf_opts = [
+    ("Low stress, near surface, open joints", 2.5),
+    ("Medium stress, favourable stress condition", 1.0),
+    ("High stress, very tight structure", 1.0),
+    ("Moderate slabbing/rock burst after >1hr in massive rock", 5.0),
+    ("Single weakness zone, shallow (<50m depth)", 5.0),
+    ("Single weakness zone, deep (>50m depth)", 2.5),
+    ("Multiple weakness zones, loose surrounding rock", 10.0),
+    ("Mild squeezing rock pressure", 7.5),
+    ("Heavy squeezing rock pressure", 15.0),
+    ("Mild swelling rock pressure", 7.5),
+    ("Heavy swelling rock pressure", 12.5),
+]
+
+esr_opts = [
+    ("Temporary mine openings", 4.0),
+    ("Permanent mine openings, water tunnels, pilot tunnels", 1.6),
+    ("Storage rooms, water treatment, minor road/rail tunnels", 1.3),
+    ("Power stations, major road/rail tunnels, portals, intersections", 1.0),
+    ("Underground nuclear plants, railway stations, sports facilities", 0.8),
+]
+
+# Helper to pick value from a list of (desc, val)
+def val_from(desc, options_list):
+    for d, v in options_list:
+        if d == desc:
+            return v
+    raise ValueError(f"Unknown description: {desc}")
+
+# Q classification limits
+q_classes = [
+    (0.001, 0.01, "Exceptionally poor"),
+    (0.01, 0.1, "Extremely poor"),
+    (0.1, 1, "Very poor"),
+    (1, 4, "Poor"),
+    (4, 10, "Fair"),
+    (10, 40, "Good"),
+    (40, 100, "Very good"),
+    (100, 400, "Extremely good"),
+    (400, 1000, "Exceptionally good"),
+]
+
+# =======================================================
+#  Input your conditions here
+# =======================================================
+RQD = 75
+Jn_desc = "Two joint sets"
+Jr_desc = "Rough/irregular, undulating"
+Ja_desc = "Unaltered joint walls, surface staining only"
+Jw_desc = "Dry excavation or minor inflow"
+SRF_desc = "Medium stress, favourable stress condition"
+ESR_desc = "Power stations, major road/rail tunnels, portals, intersections"
+tunnel_span_m = 12.0
+
+Jn = val_from(Jn_desc, joint_sets)
+Jr = val_from(Jr_desc, jr_opts)
+Ja = val_from(Ja_desc, ja_opts)
+Jw = val_from(Jw_desc, jw_opts)
+SRF = val_from(SRF_desc, srf_opts)
+ESR = val_from(ESR_desc, esr_opts)
+
+# ------------------- core formulas ----------------------
+Q_raw = (RQD / Jn) * (Jr / Ja) * (Jw / SRF)
+Q = int(np.floor(Q_raw))               # <-- rounded to lowest integer
+
+def classify_q(q):
+    for lo, hi, name in q_classes:
+        if lo <= q < hi:
+            return name
+    if q < q_classes[0][0]:
+        return q_classes[0][2]
+    return q_classes[-1][2]
+
+quality = classify_q(Q)
+De = tunnel_span_m / ESR
+De_max = 2 * (Q ** 0.4)
+bolt_L = 2 + 0.15 * De
+roof_kPa = (2.0 / Jr) * (Q ** (-1/3)) * 98.0665
+needs_support = De > De_max
+
+# Printout
+print("="*50)
+print(f"Q (floor) = {Q}   ({quality})")
+print(f"Equivalent dimension, De = {De:.2f} m")
+print(f"Self‑supporting De_max = {De_max:.2f} m")
+print(f"Support required? {'YES' if needs_support else 'No'}")
+print(f"Indicative bolt length ~ {bolt_L:.2f} m")
+print(f"Indicative roof pressure ~ {roof_kPa:.1f} kPa")
+print("="*50)
+
+# ---------- chart template ----------
+clean_template = go.layout.Template()
+clean_template.layout = go.Layout(
+    font=dict(family="Arial, sans-serif", size=12, color="#333"),
+    plot_bgcolor="white",
+    paper_bgcolor="white",
+    xaxis=dict(showgrid=True, gridcolor="#eaeaea", zeroline=False, showline=True, linecolor="#ccc"),
+    yaxis=dict(showgrid=True, gridcolor="#eaeaea", zeroline=False, showline=True, linecolor="#ccc"),
+    margin=dict(l=60, r=40, t=60, b=60),
+    legend=dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5),
+)
+
+# ------------------ Q‑scale bar chart --------------------
+colors = ["#7a1f1f","#a83232","#c9622d","#d9a441","#d4c847",
+          "#9ec54a","#5fae4a","#2f8f5b","#1f6f6f"]
+fig_bar = go.Figure()
+for (lo, hi, name), col in zip(q_classes, colors):
+    fig_bar.add_trace(go.Bar(
+        x=[np.log10(hi)-np.log10(lo)],
+        y=["Q scale"], base=[np.log10(lo)],
+        orientation="h", marker_color=col, name=name,
+        hovertemplate=f"{name}<br>Q {lo}–{hi}<extra></extra>"
+    ))
+
+# clamp Q for display on log scale
+q_plot = max(min(Q, q_classes[-1][1]), q_classes[0][0])
+fig_bar.add_trace(go.Scatter(
+    x=[np.log10(q_plot)], y=["Q scale"], mode="markers",
+    marker=dict(symbol="diamond", size=16, color="white",
+                line=dict(color="black", width=2)),
+    name=f"Q = {Q}"
+))
+
+fig_bar.update_layout(
+    template=clean_template,
+    barmode="stack",
+    height=175,
+    title=dict(text="Q‑System Classification Scale", x=0.5, xanchor="center"),
+    xaxis_title="log₁₀(Q)",
+    yaxis=dict(showticklabels=False, showgrid=False),
+    margin=dict(l=10, r=20, t=50, b=20),
+    legend=dict(orientation="h", y=-0.5, x=0.5, xanchor="center"),
+)
+fig_bar.show()
+
+# ------------------ De vs Q support boundary ------------
+q_vals = np.logspace(-3, 3, 200)
+de_boundary = 2 * q_vals**0.4
+
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=q_vals, y=de_boundary, mode="lines",
+                         line=dict(color="black", width=2),
+                         name="Self‑supporting limit<br>(De = 2·Q<sup>0.4</sup>)"))
+fig.add_trace(go.Scatter(x=q_vals, y=de_boundary, fill="tonexty",
+                         mode="none", fillcolor="rgba(220,50,50,0.07)",
+                         showlegend=False))
+fig.add_trace(go.Scatter(x=[Q], y=[De], mode="markers",
+                         marker=dict(symbol="star", size=18, color="#c0392b",
+                                     line=dict(color="black", width=1)),
+                         name="Your excavation"))
+
+# --- Annotation with the important numbers ---
+support_msg = (
+    f"<b>De = {De:.1f} m</b>  (De<sub>max</sub> = {De_max:.1f} m)<br>"
+    f"Support:  <b>{'YES' if needs_support else 'No'}</b><br>"
+    f"Bolt length ≈ <b>{bolt_L:.1f} m</b><br>"
+    f"Roof pressure ≈ <b>{roof_kPa:.0f} kPa</b>"
+)
+fig.add_annotation(
+    x=np.log10(Q), y=np.log10(De),
+    text=support_msg,
+    showarrow=True,
+    arrowhead=2,
+    arrowsize=1,
+    arrowwidth=1.5,
+    arrowcolor="#555",
+    ax=40,
+    ay=-50,
+    bgcolor="rgba(255,255,255,0.9)",
+    bordercolor="#888",
+    borderwidth=1,
+    font=dict(size=13, color="#222"),
+    align="left"
+)
+
+fig.update_layout(
+    template=clean_template,
+    title=dict(text="Support Requirement – De vs Q (Barton, 2002)", x=0.5, xanchor="center"),
+    xaxis=dict(type="log", title="Q (log scale)"),
+    yaxis=dict(type="log", title="Equivalent dimension, De (log scale)"),
+    height=635,
+    margin=dict(l=60, r=30, t=60, b=50),
+    legend=dict(orientation="h", y=-0.2, x=0.5, xanchor="center"),
+)
+fig.show()
