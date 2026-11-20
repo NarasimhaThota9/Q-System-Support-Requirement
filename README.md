@@ -36,7 +36,7 @@ The Q-value is calculated using the standard Barton, Lien & Lunde (1974) equatio
 
 The notebook produces a console printout of the results, a Q-scale classification bar chart, and a De vs Q support boundary plot.
 
-![Q-System Output](output.png)
+[Q-System Output](output.png)
 
 ## Usage
 
